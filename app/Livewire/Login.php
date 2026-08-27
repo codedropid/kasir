@@ -47,6 +47,8 @@ class Login extends Component
             $remaining = RateLimiter::remaining($throttleKey, 5);
             $this->addError('email', 'Email atau kata sandi salah. (Sisa percobaan: ' . $remaining . ')');
         }
+    }
+
     public function render()
     {
         return view('livewire.login');
