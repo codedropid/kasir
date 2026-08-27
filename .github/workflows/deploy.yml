@@ -17,33 +17,20 @@ jobs:
         with:
           fetch-depth: 2
 
-      # 2. Setup PHP Environment (PHP 8.3 untuk Laravel 11)
-      - name: 🐘 Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.3'
-          extensions: mbstring, pdo_mysql, curl, fileinfo, gd, zip, openssl, bcmath
-          coverage: none
-
-      # 3. Install Composer Dependencies (Production only)
-      - name: 📦 Install Composer Dependencies
-        run: |
-          composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
-
-      # 4. Setup Node.js Environment
+      # 2. Setup Node.js Environment
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
-      # 5. Build Frontend Assets (Vite / Tailwind)
+      # 3. Build Frontend Assets (Vite / Tailwind)
       - name: 🎨 Build Frontend Assets
         run: |
           npm ci
           npm run build
 
-      # 6. Deploy to Hosting Server via FTP
+      # 4. Deploy to Hosting Server via FTP (Fast sync tanpa vendor)
       - name: 🚀 Sync Files via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
@@ -57,6 +44,7 @@ jobs:
           exclude: |
             **/.git*
             **/.git*/**
+            **/vendor/**
             **/node_modules/**
             **/tests/**
             **/.env
@@ -68,4 +56,5 @@ jobs:
             **/vite.config.js
             **/package.json
             **/package-lock.json
-            **/kode kasir.zip
+            **/*.zip
+
