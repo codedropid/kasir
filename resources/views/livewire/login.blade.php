@@ -135,35 +135,6 @@
                         <i data-lucide="arrow-right" class="w-4 h-4"></i>
                     </button>
                 </form>
-
-                <!-- Divider -->
-                <div class="relative flex items-center justify-center py-1">
-                    <div class="border-t border-slate-700/60 w-full"></div>
-                    <span class="bg-[#23222d] px-3 text-[11px] font-medium text-slate-400 uppercase tracking-wider whitespace-nowrap">
-                        Atau akses cepat demo
-                    </span>
-                    <div class="border-t border-slate-700/60 w-full"></div>
-                </div>
-
-                <!-- Quick 1-Click Demo Logins -->
-                <div class="grid grid-cols-2 gap-3">
-                    <button 
-                        type="button" 
-                        wire:click="quickLogin('kasir')" 
-                        class="py-2.5 px-4 rounded-2xl bg-[#2f2e3d] hover:bg-[#383748] border border-slate-700/60 text-slate-200 text-xs font-bold flex items-center justify-center gap-2 transition-all hover:border-emerald-500/40 hover:text-emerald-300">
-                        <i data-lucide="user" class="w-4 h-4 text-emerald-400"></i>
-                        <span>Kasir Demo</span>
-                    </button>
-
-                    <button 
-                        type="button" 
-                        wire:click="quickLogin('admin')" 
-                        class="py-2.5 px-4 rounded-2xl bg-[#2f2e3d] hover:bg-[#383748] border border-slate-700/60 text-slate-200 text-xs font-bold flex items-center justify-center gap-2 transition-all hover:border-amber-500/40 hover:text-amber-300">
-                        <i data-lucide="shield" class="w-4 h-4 text-amber-400"></i>
-                        <span>Admin Demo</span>
-                    </button>
-                </div>
-
             </div>
         </div>
 

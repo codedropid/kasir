@@ -47,21 +47,6 @@ class Login extends Component
             $remaining = RateLimiter::remaining($throttleKey, 5);
             $this->addError('email', 'Email atau kata sandi salah. (Sisa percobaan: ' . $remaining . ')');
         }
-    }
-
-    public function quickLogin(string $role): void
-    {
-        if ($role === 'admin') {
-            $this->email = 'admin@kafe.com';
-            $this->password = 'password';
-        } else {
-            $this->email = 'kasir@kafe.com';
-            $this->password = 'password';
-        }
-
-        $this->login();
-    }
-
     public function render()
     {
         return view('livewire.login');
