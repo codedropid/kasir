@@ -352,6 +352,13 @@
                 </div>
             </div>
 
+            @error('checkout')
+                <div class="p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
+                    <i data-lucide="alert-circle" class="w-4 h-4 flex-shrink-0"></i>
+                    <span>{{ $message }}</span>
+                </div>
+            @enderror
+
             <!-- Action Buttons on Mobile & Desktop -->
             <div class="flex items-center gap-2">
                 <button 
@@ -531,6 +538,13 @@
                         </div>
                     @endif
                 </div>
+
+                @error('checkout')
+                    <div class="mx-4 sm:mx-6 mb-2 p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
+                        <i data-lucide="alert-circle" class="w-4 h-4 flex-shrink-0"></i>
+                        <span>{{ $message }}</span>
+                    </div>
+                @enderror
 
                 <!-- Modal Footer -->
                 <div class="p-4 border-t border-slate-800 bg-slate-950/60 flex items-center justify-end gap-3">

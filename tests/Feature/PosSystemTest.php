@@ -138,4 +138,16 @@ class PosSystemTest extends TestCase
             'price' => 25000,
         ]);
     }
+
+    public function test_discount_inputs_can_be_cleared_without_errors(): void
+    {
+        Livewire::actingAs($this->kasir)
+            ->test(PosComponent::class)
+            ->call('addToCart', $this->product->id)
+            ->set('discountPercent', '10')
+            ->set('discountPercent', '')
+            ->set('discountAmount', '5000')
+            ->set('discountAmount', '')
+            ->assertHasNoErrors();
+    }
 }

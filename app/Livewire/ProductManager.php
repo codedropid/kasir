@@ -138,6 +138,13 @@ class ProductManager extends Component
     {
         $this->authorizeAdmin();
         $product = Product::findOrFail($id);
+
+        // Prevent deletion if product has historical order transactions to protect financial audit trail
+        if ($product->orderItems()->exists()) {
+            session()->flash('error', 'Produk "' . htmlspecialchars($product->name, ENT_QUOTES, 'UTF-8') . '" tidak dapat dihapus karena sudah tercatat dalam riwayat penjualan kasir. Nonaktifkan ketersediaan menu (Stok Habis) sebagai gantinya agar laporan keuangan tetap akurat.');
+            return;
+        }
+
         $name = $product->name;
         $product->delete();
         session()->flash('message', 'Produk "' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '" berhasil dihapus.');
@@ -172,6 +179,13 @@ class ProductManager extends Component
     {
         $this->authorizeAdmin();
         $category = Category::findOrFail($id);
+
+        // Prevent deletion if category still has products
+        if ($category->products()->exists()) {
+            session()->flash('error', 'Kategori "' . htmlspecialchars($category->name, ENT_QUOTES, 'UTF-8') . '" tidak dapat dihapus karena masih memuat produk aktif. Hapus atau pindahkan produk terlebih dahulu.');
+            return;
+        }
+
         $category->delete();
         session()->flash('message', 'Kategori berhasil dihapus.');
     }

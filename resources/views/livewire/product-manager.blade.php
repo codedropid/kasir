@@ -1,12 +1,21 @@
 <div class="flex-1 overflow-y-auto bg-slate-950 p-4 lg:p-8">
     <div class="max-w-7xl mx-auto space-y-6">
 
-        <!-- Flash Alert -->
+        <!-- Flash Alerts -->
         @if(session()->has('message'))
             <div class="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm flex items-center justify-between shadow-lg">
                 <div class="flex items-center gap-2.5">
                     <i data-lucide="check-circle-2" class="w-5 h-5"></i>
                     <span>{{ session('message') }}</span>
+                </div>
+            </div>
+        @endif
+
+        @if(session()->has('error'))
+            <div class="p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-center justify-between shadow-lg">
+                <div class="flex items-center gap-2.5">
+                    <i data-lucide="alert-triangle" class="w-5 h-5 flex-shrink-0"></i>
+                    <span>{{ session('error') }}</span>
                 </div>
             </div>
         @endif

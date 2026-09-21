@@ -9,6 +9,10 @@ use App\Models\PaymentMethod;
 use App\Models\Product;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
@@ -24,17 +28,21 @@ class PosComponent extends Component
     public string $customerName = '';
     public string $tableNumber = '';
     public string $orderType = 'dine_in'; // dine_in, take_away
-    public float $discountAmount = 0;
-    public float $discountPercent = 0;
+    public $discountAmount = 0;
+    public $discountPercent = 0;
+
+    #[Locked]
     public float $taxRate = 10; // 10% PB1
 
     // Payment state
     public bool $isPaymentModalOpen = false;
     public ?int $selectedPaymentMethodId = null;
-    public float $paidAmount = 0;
+    public $paidAmount = 0;
 
     // Post-checkout receipt modal
     public bool $isSuccessModalOpen = false;
+
+    #[Locked]
     public ?int $latestOrderId = null;
 
     // Mobile Drawer state
@@ -148,11 +156,11 @@ class PosComponent extends Component
 
     public function getCalculatedDiscountProperty(): float
     {
-        $percent = max(0, min(100, (float) $this->discountPercent));
+        $percent = max(0, min(100, (float) ($this->discountPercent ?: 0)));
         if ($percent > 0) {
             return round(($this->subtotal * $percent) / 100, 2);
         }
-        $amount = max(0, (float) $this->discountAmount);
+        $amount = max(0, (float) ($this->discountAmount ?: 0));
         return min($amount, $this->subtotal);
     }
 
@@ -169,7 +177,8 @@ class PosComponent extends Component
 
     public function getChangeAmountProperty(): float
     {
-        return max(0, $this->paidAmount - $this->finalAmount);
+        $paid = (float) ($this->paidAmount ?: 0);
+        return max(0, $paid - $this->finalAmount);
     }
 
     public function openPaymentModal(): void
@@ -187,22 +196,35 @@ class PosComponent extends Component
         $this->isPaymentModalOpen = false;
     }
 
-    public function setPaidAmount(float $amount): void
+    public function setPaidAmount($amount): void
     {
-        $this->paidAmount = max(0, $amount);
+        $this->paidAmount = max(0, (float) $amount);
     }
 
-    public function addPaidAmount(float $amount): void
+    public function addPaidAmount($amount): void
     {
-        $this->paidAmount = max(0, $this->paidAmount + $amount);
+        $this->paidAmount = max(0, ((float) ($this->paidAmount ?: 0)) + (float) $amount);
     }
 
     public function checkout(): void
     {
+        if (!Auth::check()) {
+            abort(401, 'Silakan login terlebih dahulu untuk memproses pesanan.');
+        }
+
         if (empty($this->cart)) {
             $this->addError('checkout', 'Keranjang pesanan masih kosong.');
             return;
         }
+
+        // Throttle checkouts to prevent accidental double-submission or flood abuse (max 30 / minute)
+        $throttleKey = 'pos-checkout:' . (Auth::id() ?? request()->ip());
+        if (RateLimiter::tooManyAttempts($throttleKey, 30)) {
+            $seconds = RateLimiter::availableIn($throttleKey);
+            $this->addError('checkout', 'Terlalu banyak permintaan transaksi dalam waktu singkat. Harap tunggu ' . $seconds . ' detik.');
+            return;
+        }
+        RateLimiter::hit($throttleKey, 60);
 
         // Validate and sanitize customer and table inputs
         $this->customerName = mb_substr($this->sanitizeInput($this->customerName), 0, 100);
@@ -223,8 +245,9 @@ class PosComponent extends Component
         }
 
         $isCash = strtolower($paymentMethod->name) === 'tunai';
+        $paid = (float) ($this->paidAmount ?: 0);
 
-        if ($isCash && $this->paidAmount < $this->finalAmount) {
+        if ($isCash && $paid < $this->finalAmount) {
             $this->addError('paidAmount', 'Jumlah pembayaran tunai kurang dari total tagihan.');
             return;
         }
@@ -240,7 +263,7 @@ class PosComponent extends Component
                 return;
             }
 
-            $qty = max(1, (int) $item['qty']);
+            $qty = min(9999, max(1, (int) $item['qty']));
             $unitPrice = (float) $product->price;
             $lineSubtotal = $qty * $unitPrice;
             $verifiedSubtotal += $lineSubtotal;
@@ -255,29 +278,30 @@ class PosComponent extends Component
         }
 
         // Recalculate discount & final amount server-side
+        $discountPercentVal = (float) ($this->discountPercent ?: 0);
+        $discountAmountVal = (float) ($this->discountAmount ?: 0);
         $discountVal = 0.0;
-        if ($this->discountPercent > 0) {
-            $percent = max(0, min(100, (float) $this->discountPercent));
+        if ($discountPercentVal > 0) {
+            $percent = max(0, min(100, $discountPercentVal));
             $discountVal = round(($verifiedSubtotal * $percent) / 100, 2);
         } else {
-            $discountVal = min(max(0, (float) $this->discountAmount), $verifiedSubtotal);
+            $discountVal = min(max(0, $discountAmountVal), $verifiedSubtotal);
         }
 
         $taxable = max(0, $verifiedSubtotal - $discountVal);
         $taxVal = round(($taxable * $this->taxRate) / 100, 2);
         $finalVal = max(0, $verifiedSubtotal - $discountVal + $taxVal);
-        $changeVal = $isCash ? max(0, $this->paidAmount - $finalVal) : 0.0;
+        $changeVal = $isCash ? max(0, $paid - $finalVal) : 0.0;
 
-        // Generate Order Number: TRX-YYYYMMDD-0001
+        // Concurrency-Safe Order Number: TRX-YYYYMMDD-XXXXX (immune to race-condition collisions)
         $todayPrefix = 'TRX-' . date('Ymd') . '-';
-        $todayCount = Order::whereDate('created_at', today())->count();
-        $orderNumber = $todayPrefix . str_pad($todayCount + 1, 3, '0', STR_PAD_LEFT);
+        $orderNumber = $todayPrefix . strtoupper(Str::random(5));
 
         DB::beginTransaction();
         try {
             $order = Order::create([
                 'order_number' => $orderNumber,
-                'user_id' => Auth::id() ?? 1,
+                'user_id' => Auth::id(),
                 'customer_name' => $this->customerName ?: null,
                 'table_number' => ($this->orderType === 'dine_in') ? ($this->tableNumber ?: null) : null,
                 'order_type' => $this->orderType,
@@ -285,7 +309,7 @@ class PosComponent extends Component
                 'tax_amount' => $taxVal,
                 'discount_amount' => $discountVal,
                 'final_amount' => $finalVal,
-                'paid_amount' => $isCash ? $this->paidAmount : $finalVal,
+                'paid_amount' => $isCash ? $paid : $finalVal,
                 'change_amount' => $changeVal,
                 'payment_method_id' => $paymentMethod->id,
                 'status' => 'completed',
@@ -310,9 +334,13 @@ class PosComponent extends Component
 
             // Clear current working cart
             $this->clearCart();
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
-            $this->addError('checkout', 'Terjadi kesalahan saat memproses pesanan: ' . $e->getMessage());
+            Log::error('POS Checkout failed: ' . $e->getMessage(), [
+                'user_id' => Auth::id(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            $this->addError('checkout', 'Terjadi kendala teknis pada sistem saat memproses pesanan. Silakan coba kembali beberapa saat lagi.');
         }
     }
 

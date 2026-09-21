@@ -198,4 +198,106 @@ class SecurityScanTest extends TestCase
             ->call('saveProduct')
             ->assertStatus(403);
     }
+
+    public function test_http_security_headers_are_present(): void
+    {
+        $response = $this->get('/login');
+
+        $response->assertHeader('X-Frame-Options', 'SAMEORIGIN');
+        $response->assertHeader('X-Content-Type-Options', 'nosniff');
+        $response->assertHeader('X-XSS-Protection', '1; mode=block');
+        $response->assertHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    }
+
+    public function test_cannot_delete_product_with_order_history_preserving_audit_trail(): void
+    {
+        // Perform a checkout first so the product has order items
+        Livewire::actingAs($this->kasir)
+            ->test(PosComponent::class)
+            ->call('addToCart', $this->product->id)
+            ->set('selectedPaymentMethodId', $this->paymentMethod->id)
+            ->set('paidAmount', 50000)
+            ->call('checkout')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('order_items', [
+            'product_id' => $this->product->id,
+        ]);
+
+        // Attempt to delete product as admin
+        Livewire::actingAs($this->admin)
+            ->test(ProductManager::class)
+            ->call('deleteProduct', $this->product->id)
+            ->assertSee('tidak dapat dihapus');
+
+        // Product and historical order item must remain intact
+        $this->assertDatabaseHas('products', ['id' => $this->product->id]);
+        $this->assertDatabaseHas('order_items', ['product_id' => $this->product->id]);
+    }
+
+    public function test_cannot_delete_category_containing_products(): void
+    {
+        // Category has $this->product inside it
+        Livewire::actingAs($this->admin)
+            ->test(ProductManager::class)
+            ->call('deleteCategory', $this->category->id)
+            ->assertSee('tidak dapat dihapus');
+
+        $this->assertDatabaseHas('categories', ['id' => $this->category->id]);
+    }
+
+    public function test_locked_properties_tax_rate_and_latest_order_id_cannot_be_tampered(): void
+    {
+        $this->expectException(\Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException::class);
+
+        Livewire::actingAs($this->kasir)
+            ->test(PosComponent::class)
+            ->set('taxRate', 0.0);
+    }
+
+    public function test_order_number_is_unique_and_collision_safe(): void
+    {
+        $this->actingAs($this->kasir);
+
+        $orderNumbers = [];
+
+        for ($i = 0; $i < 3; $i++) {
+            Livewire::test(PosComponent::class)
+                ->call('addToCart', $this->product->id)
+                ->set('selectedPaymentMethodId', $this->paymentMethod->id)
+                ->set('paidAmount', 50000)
+                ->call('checkout')
+                ->assertHasNoErrors();
+        }
+
+        $orders = \App\Models\Order::all();
+        $this->assertCount(3, $orders);
+
+        $orderNumbers = $orders->pluck('order_number')->toArray();
+        $this->assertCount(3, array_unique($orderNumbers));
+        foreach ($orderNumbers as $num) {
+            $this->assertStringStartsWith('TRX-', $num);
+        }
+    }
+
+    public function test_checkout_rate_limiter_protects_against_spamming(): void
+    {
+        $this->actingAs($this->kasir);
+        $throttleKey = 'pos-checkout:' . $this->kasir->id;
+
+        // Simulate 30 hits
+        for ($i = 0; $i < 30; $i++) {
+            \Illuminate\Support\Facades\RateLimiter::hit($throttleKey, 60);
+        }
+
+        // 31st checkout attempt should be blocked
+        Livewire::actingAs($this->kasir)
+            ->test(PosComponent::class)
+            ->call('addToCart', $this->product->id)
+            ->set('selectedPaymentMethodId', $this->paymentMethod->id)
+            ->set('paidAmount', 50000)
+            ->call('checkout')
+            ->assertHasErrors(['checkout'])
+            ->assertSee('Terlalu banyak permintaan transaksi');
+    }
 }
